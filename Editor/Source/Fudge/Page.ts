@@ -181,6 +181,27 @@ namespace Fudge {
           // TODO: don't switch to scale mode when using fly-camera and pressing E
           Page.setTransform(TRANSFORM.SCALE);
           break;
+        case ƒ.KEYBOARD_CODE.Y:
+          // undo and redo keyboard shortcuts
+          // Note: german layout switches Y and Z
+          if (!_event.ctrlKey) {
+            break;
+          }
+          if (_event.shiftKey) {
+            // Redo (Ctrl+Shift+Y)
+            console.log("REDO", _event);
+            break;
+          }
+          // Undo (Ctrl+Y)
+          console.log("UNDO", _event);
+          break;
+        case ƒ.KEYBOARD_CODE.Z:
+          if (!_event.ctrlKey) {
+            break;
+          }
+          // Redo (Ctrl+Z)
+          console.log("ALTERNATE REDO", _event);
+          break;
       }
     };
 

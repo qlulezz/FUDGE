@@ -55,7 +55,9 @@ declare namespace Fudge {
         PANEL_PROJECT_OPEN = "panelProjectOpen",
         PANEL_HELP_OPEN = "panelHelpOpen",
         PANEL_PARTICLE_SYSTEM_OPEN = "panelParticleSystemOpen",
-        FULLSCREEN = "fullscreen"
+        FULLSCREEN = "fullscreen",
+        UNDO = "undo",
+        REDO = "redo"
     }
     enum PANEL {
         GRAPH = "PanelGraph",
