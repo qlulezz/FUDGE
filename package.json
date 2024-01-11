@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "run": "electron Editor/Electron",
+    "dev": "cd Editor/Source/Fudge && npx tsc-watch --onSuccess \"electron ../../Electron\"",
+    "devEditor": "cd Editor/Source && npx tsc-watch --onSuccess \"electron ../Electron\"",
     "build": "electron-packager Editor/Electron FUDGE --icon=Miscellaneous/Logo/Fudge_360.png --overwrite --all"
   },
   "repository": {

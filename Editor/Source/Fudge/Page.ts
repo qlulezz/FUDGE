@@ -62,6 +62,17 @@ namespace Fudge {
       return Page.physics[_graph.idResource] || (Page.physics[_graph.idResource] = new ƒ.Physics());
     }
 
+    /** Send custom copies of the given event to the panels */
+    public static broadcast(_event: EditorEvent): void {
+      let detail: EventDetail = _event.detail || {};
+      let sender: Panel | Page = detail?.sender;
+      detail.sender = Page;
+      for (let panel of Page.panels) {
+        if (panel != sender) // don't send back to original sender
+          panel.dispatch(<EVENT_EDITOR>_event.type, { detail: detail });
+      }
+    }
+
     // called by windows load-listener
     private static async start(): Promise<void> {
       // ƒ.Debug.setFilter(ƒ.DebugConsole, ƒ.DEBUG_FILTER.ALL | ƒ.DEBUG_FILTER.SOURCE);
@@ -156,17 +167,6 @@ namespace Fudge {
       document.addEventListener("keyup", Page.hndKey);
     }
 
-    /** Send custom copies of the given event to the panels */
-    private static broadcast(_event: EditorEvent): void {
-      let detail: EventDetail = _event.detail || {};
-      let sender: Panel | Page = detail?.sender;
-      detail.sender = Page;
-      for (let panel of Page.panels) {
-        if (panel != sender) // don't send back to original sender
-          panel.dispatch(<EVENT_EDITOR>_event.type, { detail: detail });
-      }
-    }
-
     private static hndKey = (_event: KeyboardEvent): void => {
       document.exitPointerLock();
 
@@ -181,7 +181,7 @@ namespace Fudge {
           // TODO: don't switch to scale mode when using fly-camera and pressing E
           Page.setTransform(TRANSFORM.SCALE);
           break;
-        case ƒ.KEYBOARD_CODE.Y:
+        /* case ƒ.KEYBOARD_CODE.Y:
           // undo and redo keyboard shortcuts
           // Note: german layout switches Y and Z
           if (!_event.ctrlKey) {
@@ -189,19 +189,19 @@ namespace Fudge {
           }
           if (_event.shiftKey) {
             // Redo (Ctrl+Shift+Y)
-            console.log("REDO", _event);
+            RollbackProject.redoEvent();
             break;
           }
           // Undo (Ctrl+Y)
-          console.log("UNDO", _event);
+          RollbackProject.undoEvent();
           break;
         case ƒ.KEYBOARD_CODE.Z:
           if (!_event.ctrlKey) {
             break;
           }
           // Redo (Ctrl+Z)
-          console.log("ALTERNATE REDO", _event);
-          break;
+          RollbackProject.redoEvent();
+          break; */
       }
     };
 
@@ -286,6 +286,14 @@ namespace Fudge {
         Page.add(PanelParticleSystem, null);
         // let panel: Panel = PanelManager.instance.createPanelFromTemplate(new ViewAnimationTemplate(), "Animation Panel");
         // PanelManager.instance.addPanel(panel);
+      });
+
+      ipcRenderer.on(MENU.UNDO, (_event: Electron.IpcRendererEvent, _args: unknown[]) => {
+        RollbackProject.undoEvent();
+      });
+
+      ipcRenderer.on(MENU.REDO, (_event: Electron.IpcRendererEvent, _args: unknown[]) => {
+        RollbackProject.redoEvent();
       });
     }
   }

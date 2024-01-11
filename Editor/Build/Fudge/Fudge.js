@@ -379,6 +379,16 @@ var Fudge;
         static getPhysics(_graph) {
             return Page.physics[_graph.idResource] || (Page.physics[_graph.idResource] = new ƒ.Physics());
         }
+        /** Send custom copies of the given event to the panels */
+        static broadcast(_event) {
+            let detail = _event.detail || {};
+            let sender = detail?.sender;
+            detail.sender = Page;
+            for (let panel of Page.panels) {
+                if (panel != sender) // don't send back to original sender
+                    panel.dispatch(_event.type, { detail: detail });
+            }
+        }
         // called by windows load-listener
         static async start() {
             // ƒ.Debug.setFilter(ƒ.DebugConsole, ƒ.DEBUG_FILTER.ALL | ƒ.DEBUG_FILTER.SOURCE);
@@ -457,16 +467,6 @@ var Fudge;
             document.addEventListener(Fudge.EVENT_EDITOR.TRANSFORM, Page.hndEvent);
             document.addEventListener("keyup", Page.hndKey);
         }
-        /** Send custom copies of the given event to the panels */
-        static broadcast(_event) {
-            let detail = _event.detail || {};
-            let sender = detail?.sender;
-            detail.sender = Page;
-            for (let panel of Page.panels) {
-                if (panel != sender) // don't send back to original sender
-                    panel.dispatch(_event.type, { detail: detail });
-            }
-        }
         static hndKey = (_event) => {
             document.exitPointerLock();
             switch (_event.code) {
@@ -480,27 +480,27 @@ var Fudge;
                     // TODO: don't switch to scale mode when using fly-camera and pressing E
                     Page.setTransform(Fudge.TRANSFORM.SCALE);
                     break;
-                case ƒ.KEYBOARD_CODE.Y:
-                    // undo and redo keyboard shortcuts
-                    // Note: german layout switches Y and Z
-                    if (!_event.ctrlKey) {
-                        break;
-                    }
-                    if (_event.shiftKey) {
-                        // Redo (Ctrl+Shift+Y)
-                        console.log("REDO", _event);
-                        break;
-                    }
-                    // Undo (Ctrl+Y)
-                    console.log("UNDO", _event);
+                /* case ƒ.KEYBOARD_CODE.Y:
+                  // undo and redo keyboard shortcuts
+                  // Note: german layout switches Y and Z
+                  if (!_event.ctrlKey) {
                     break;
+                  }
+                  if (_event.shiftKey) {
+                    // Redo (Ctrl+Shift+Y)
+                    RollbackProject.redoEvent();
+                    break;
+                  }
+                  // Undo (Ctrl+Y)
+                  RollbackProject.undoEvent();
+                  break;
                 case ƒ.KEYBOARD_CODE.Z:
-                    if (!_event.ctrlKey) {
-                        break;
-                    }
-                    // Redo (Ctrl+Z)
-                    console.log("ALTERNATE REDO", _event);
+                  if (!_event.ctrlKey) {
                     break;
+                  }
+                  // Redo (Ctrl+Z)
+                  RollbackProject.redoEvent();
+                  break; */
             }
         };
         static hndEvent(_event) {
@@ -574,6 +574,12 @@ var Fudge;
                 // let panel: Panel = PanelManager.instance.createPanelFromTemplate(new ViewAnimationTemplate(), "Animation Panel");
                 // PanelManager.instance.addPanel(panel);
             });
+            Fudge.ipcRenderer.on(Fudge.MENU.UNDO, (_event, _args) => {
+                Fudge.RollbackProject.undoEvent();
+            });
+            Fudge.ipcRenderer.on(Fudge.MENU.REDO, (_event, _args) => {
+                Fudge.RollbackProject.redoEvent();
+            });
         }
     }
     Fudge.Page = Page;
@@ -595,6 +601,7 @@ var Fudge;
         fileStyles = "styles.css";
         graphAutoView = "";
         // private includeAutoViewScript: boolean = true;
+        panelInfo = "";
         #document;
         constructor(_base) {
             super();
@@ -638,6 +645,7 @@ var Fudge;
             Fudge.project.fileInternal = resourceFile;
             ƒ.Project.baseURL = this.base;
             let reconstruction = await ƒ.Project.loadResources(new URL(resourceFile, this.base).toString());
+            Fudge.RollbackProject.addUndoState();
             ƒ.Debug.groupCollapsed("Deserialized");
             ƒ.Debug.info(reconstruction);
             ƒ.Debug.groupEnd();
@@ -645,10 +653,13 @@ var Fudge;
             let projectSettings = settings?.getAttribute("project");
             projectSettings = projectSettings?.replace(/'/g, "\"");
             Fudge.project.mutate(JSON.parse(projectSettings || "{}"));
-            let panelInfo = settings?.getAttribute("panels");
-            panelInfo = panelInfo?.replace(/'/g, "\"");
-            Fudge.Page.setPanelInfo(panelInfo || "[]");
+            this.panelInfo = settings?.getAttribute("panels");
+            this.panelInfo = this.panelInfo?.replace(/'/g, "\"");
+            Fudge.Page.setPanelInfo(this.panelInfo || "[]");
             ƒ.Physics.cleanup(); // remove potential rigidbodies
+        }
+        reloadPanelInfo() {
+            Fudge.Page.setPanelInfo(this.panelInfo);
         }
         getProjectJSON() {
             let serialization = ƒ.Project.serialize();
@@ -830,6 +841,155 @@ var Fudge;
         }
     }
     Fudge.Project = Project;
+})(Fudge || (Fudge = {}));
+/* eslint-disable @typescript-eslint/no-explicit-any */
+var Fudge;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+(function (Fudge) {
+    class Rollback {
+        static addUndoState = this.debounce((_event) => {
+            console.log("Undo/Redo event received", _event.type, _event);
+            // Save Event
+            const copyDetail = this.deepCopy(_event.detail);
+            const clonedEvent = new Fudge.EditorEvent(_event.type, { detail: copyDetail });
+            this.undoStack.push(clonedEvent);
+            Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.UNDO, on: true });
+        });
+        static undoStack = [];
+        static redoStack = [];
+        static undoEvent() {
+            console.log("User pressed Undo");
+            // Rollback to previous event
+            if (this.undoStack.length <= 0) {
+                return;
+            }
+            const currentState = this.undoStack.pop();
+            this.redoStack.push(currentState);
+            Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.REDO, on: true });
+            const previousState = this.undoStack.pop();
+            console.log("currentState", currentState);
+            console.log("previousState", previousState);
+            // Resend previous state
+            Fudge.Page.broadcast(previousState);
+        }
+        ;
+        static redoEvent() {
+            console.log("User pressed Redo");
+            if (this.redoStack.length <= 0) {
+                return;
+            }
+            const currentState = this.redoStack.pop();
+            this.undoStack.push(currentState);
+            const previousState = this.redoStack.pop();
+            Fudge.Page.broadcast(previousState);
+        }
+        ;
+        // debouncing, so that sliders are easier to use
+        static debounce(_func, _delay = 200) {
+            let debounceTimer;
+            return function () {
+                const context = this;
+                const args = arguments;
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => _func.apply(context, args), _delay);
+            };
+        }
+        static deepCopy(_obj, _cache = new WeakMap()) {
+            // If the object is not an object or is null, return the original object
+            if (_obj === null || typeof _obj !== 'object') {
+                return _obj;
+            }
+            // If the object has already been copied, return the cached copy
+            if (_cache.has(_obj)) {
+                return _cache.get(_obj);
+            }
+            // If the object is an array, create a new array and copy each element
+            if (Array.isArray(_obj)) {
+                const newArray = _obj.map((_item) => this.deepCopy(_item, _cache));
+                _cache.set(_obj, newArray);
+                return newArray;
+            }
+            // If the object is a plain object, create a new object and copy each property
+            const copiedObject = {};
+            _cache.set(_obj, copiedObject);
+            for (const key in _obj) {
+                if (_obj.hasOwnProperty(key)) {
+                    copiedObject[key] = this.deepCopy(_obj[key], _cache);
+                }
+            }
+            return copiedObject;
+        }
+    }
+    Fudge.Rollback = Rollback;
+    //document.addEventListener(EVENT_EDITOR.UPDATE, Rollback.addUndoState);
+})(Fudge || (Fudge = {}));
+var Fudge;
+(function (Fudge) {
+    /**
+     * Handling rollbacks of the project state using undo and redo actions.
+     * @authors Henry Csösz, HFU, 2023
+     */
+    class RollbackProject {
+        static addUndoState = this.debounce((_clearRedoStack = false) => {
+            let projectState = Fudge.project.getProjectJSON();
+            // Save current project state, optimizations have to be done here
+            this.undoStack.push(projectState);
+            if (_clearRedoStack && this.undoStack.length <= this.maxUndoSteps) {
+                console.log("Current state saved");
+                this.redoStack = [];
+            }
+            this.updateMenuItems();
+        });
+        static maxUndoSteps = 32;
+        static undoStack = [];
+        static redoStack = [];
+        // Rollback to previous event
+        static async undoEvent() {
+            if (this.undoStack.length <= 1)
+                return;
+            const currentState = this.undoStack.pop();
+            this.redoStack.push(currentState);
+            Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.REDO, on: true });
+            const previousState = this.undoStack.pop();
+            await this.loadProjectState(previousState);
+            this.addUndoState();
+        }
+        static async redoEvent() {
+            if (this.redoStack.length <= 0)
+                return;
+            const previousState = this.redoStack.pop();
+            this.undoStack.push(previousState);
+            await this.loadProjectState(previousState);
+            this.updateMenuItems();
+        }
+        static async loadProjectState(_state) {
+            let serialization = ƒ.Serializer.parse(_state);
+            await ƒ.Project.deserialize(serialization);
+            Fudge.project.reloadPanelInfo();
+        }
+        static updateMenuItems() {
+            if (this.undoStack.length > 1)
+                Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.UNDO, on: true });
+            else
+                Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.UNDO, on: false });
+            if (this.redoStack.length > 0)
+                Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.REDO, on: true });
+            else
+                Fudge.ipcRenderer.send("enableMenuItem", { item: Fudge.MENU.REDO, on: false });
+        }
+        // debouncing, so that sliders are easier to use
+        static debounce(_func, _delay = 200) {
+            let debounceTimer;
+            return function () {
+                const context = this;
+                const args = arguments;
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => _func.apply(context, args), _delay);
+            };
+        }
+    }
+    Fudge.RollbackProject = RollbackProject;
+    document.addEventListener(Fudge.EVENT_EDITOR.UPDATE, () => RollbackProject.addUndoState(true));
 })(Fudge || (Fudge = {}));
 var Fudge;
 (function (Fudge) {

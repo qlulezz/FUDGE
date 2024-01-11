@@ -184,6 +184,8 @@ declare namespace Fudge {
         static setPanelInfo(_panelInfos: string): void;
         static setTransform(_mode: TRANSFORM): void;
         static getPhysics(_graph: ƒ.Graph): ƒ.Physics;
+        /** Send custom copies of the given event to the panels */
+        static broadcast(_event: EditorEvent): void;
         private static start;
         private static setupGoldenLayout;
         private static add;
@@ -191,8 +193,6 @@ declare namespace Fudge {
         private static generateID;
         private static loadLayout;
         private static setupPageListeners;
-        /** Send custom copies of the given event to the panels */
-        private static broadcast;
         private static hndKey;
         private static hndEvent;
         private static hndPanelCreated;
@@ -211,10 +211,12 @@ declare namespace Fudge {
         fileScript: string;
         fileStyles: string;
         private graphAutoView;
+        private panelInfo;
         constructor(_base: URL);
         openDialog(): Promise<boolean>;
         hndChange: (_event: Event) => void;
         load(_htmlContent: string): Promise<void>;
+        reloadPanelInfo(): void;
         getProjectJSON(): string;
         getProjectCSS(): string;
         getProjectHTML(_title: string): string;
@@ -225,6 +227,34 @@ declare namespace Fudge {
         private settingsStringify;
         private panelsStringify;
         private stringifyHTML;
+    }
+}
+declare namespace Fudge {
+    class Rollback {
+        static addUndoState: (_event: EditorEvent) => void;
+        private static undoStack;
+        private static redoStack;
+        static undoEvent(): void;
+        static redoEvent(): void;
+        private static debounce;
+        private static deepCopy;
+    }
+}
+declare namespace Fudge {
+    /**
+     * Handling rollbacks of the project state using undo and redo actions.
+     * @authors Henry Csösz, HFU, 2023
+     */
+    class RollbackProject {
+        static addUndoState: (_clearRedoStack?: boolean) => void;
+        private static maxUndoSteps;
+        private static undoStack;
+        private static redoStack;
+        static undoEvent(): Promise<void>;
+        static redoEvent(): Promise<void>;
+        private static loadProjectState;
+        private static updateMenuItems;
+        private static debounce;
     }
 }
 declare namespace Fudge {

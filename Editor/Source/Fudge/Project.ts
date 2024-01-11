@@ -15,6 +15,7 @@ namespace Fudge {
 
     private graphAutoView: string = "";
     // private includeAutoViewScript: boolean = true;
+    private panelInfo: string = "";
 
     #document: Document;
 
@@ -67,7 +68,8 @@ namespace Fudge {
       project.fileInternal = resourceFile;
       ƒ.Project.baseURL = this.base;
       let reconstruction: ƒ.Resources = await ƒ.Project.loadResources(new URL(resourceFile, this.base).toString());
-
+      RollbackProject.addUndoState();
+      
       ƒ.Debug.groupCollapsed("Deserialized");
       ƒ.Debug.info(reconstruction);
       ƒ.Debug.groupEnd();
@@ -76,10 +78,14 @@ namespace Fudge {
       let projectSettings: string = settings?.getAttribute("project");
       projectSettings = projectSettings?.replace(/'/g, "\"");
       project.mutate(JSON.parse(projectSettings || "{}"));
-      let panelInfo: string = settings?.getAttribute("panels");
-      panelInfo = panelInfo?.replace(/'/g, "\"");
-      Page.setPanelInfo(panelInfo || "[]");
+      this.panelInfo = settings?.getAttribute("panels");
+      this.panelInfo = this.panelInfo?.replace(/'/g, "\"");
+      Page.setPanelInfo(this.panelInfo || "[]");
       ƒ.Physics.cleanup(); // remove potential rigidbodies
+    }
+
+    public reloadPanelInfo(): void {
+      Page.setPanelInfo(this.panelInfo);
     }
 
     public getProjectJSON(): string {
