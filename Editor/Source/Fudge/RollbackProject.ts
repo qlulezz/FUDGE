@@ -8,21 +8,31 @@ namespace Fudge {
       (_clearRedoStack: boolean = false) => {
         let projectState: string = project.getProjectJSON();
 
-        // Save current project state, optimizations have to be done here
+        // save current project state
+        // optimizations have to be done here if necessary
         this.undoStack.push(projectState);
-        if (_clearRedoStack && this.undoStack.length <= this.maxUndoSteps) {
+
+        if (_clearRedoStack) {
           console.log("Current state saved");
           this.redoStack = [];
         }
+
+        if (this.undoStack.length > this.maxUndoSteps) {
+          // states in undoStack exceding maximum limit
+          this.undoStack.shift();
+        }
+
         this.updateMenuItems();
       }
     );
 
+    // number of undo steps available
+    // smaller values conserve memory
     private static maxUndoSteps: number = 32;
     private static undoStack: string[] = [];
     private static redoStack: string[] = [];
 
-    // Rollback to previous event
+    // rollback to previous event
     public static async undoEvent(): Promise<void> {
       if (this.undoStack.length <= 1) return;
 
@@ -73,4 +83,13 @@ namespace Fudge {
   }
 
   document.addEventListener(EVENT_EDITOR.UPDATE, () => RollbackProject.addUndoState(true));
+  document.addEventListener(EVENT_EDITOR.CREATE, () => RollbackProject.addUndoState(true));
+  document.addEventListener(EVENT_EDITOR.DELETE, () => RollbackProject.addUndoState(true));
+  document.addEventListener(EVENT_EDITOR.MODIFY, () => RollbackProject.addUndoState(true));
+
+  // Relevant events for rollbacks can be activated or deactivated here
+  //document.addEventListener(EVENT_EDITOR.FOCUS, () => console.log("FOCUS"));
+  //document.addEventListener(EVENT_EDITOR.OPEN, () => console.log("OPEN"));
+  //document.addEventListener(EVENT_EDITOR.SELECT, () => console.log("SELECT"));
+  //document.addEventListener(EVENT_EDITOR.TRANSFORM, () => console.log("TRANSFORM"));
 }
